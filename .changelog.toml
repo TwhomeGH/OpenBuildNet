@@ -2,6 +2,7 @@
 auto = false
 unlisted = "other"
 
+
 [[tool.changelog.docs.groups]]
 id = "development"
 color = "blue"
@@ -15,3 +16,14 @@ color = "violet"
 title = "架構與規格"
 order = 20
 paths = ["Docs/SingleNodeExecution.md"]
+
+[[tool.changelog.docs.groups]]
+id = "use-cases"
+color = "blue"
+title = "應用場景"
+order = 30
+paths = [
+    "Docs/UseCases/README.md",
+    "Docs/UseCases/01-ios-macos.md",
+    "Docs/UseCases/02-windows-to-linux.md",
+]

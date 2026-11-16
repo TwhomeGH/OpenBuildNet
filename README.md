@@ -1,5 +1,7 @@
 # OpenBuildNet
 
+跨平台建構與測試的例子見[應用場景](Docs/UseCases/README.md)。
+
 ## 單節點開發測試
 
 從 repo 根目錄執行以下命令。首次建置需要能下載 Alpine 基礎映像，Dockerfile 以 digest 固定基礎版本。
