@@ -1,0 +1,6 @@
+{
+  "input": {"input.txt": "OpenBuildNet\n"},
+  "command": ["sh", "-c", "cat input.txt > result.txt && echo build-complete"],
+  "artifact": "result.txt",
+  "timeout_seconds": 10
+}
