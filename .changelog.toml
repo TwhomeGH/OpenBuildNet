@@ -1,0 +1,17 @@
+[tool.changelog.docs]
+auto = false
+unlisted = "other"
+
+[[tool.changelog.docs.groups]]
+id = "development"
+color = "blue"
+title = "開發指南"
+order = 10
+paths = ["Docs/Development.md"]
+
+[[tool.changelog.docs.groups]]
+id = "architecture"
+color = "violet"
+title = "架構與規格"
+order = 20
+paths = ["Docs/SingleNodeExecution.md"]

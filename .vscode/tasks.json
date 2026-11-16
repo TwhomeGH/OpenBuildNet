@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "OpenBuildNet: Build dev image",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "build",
+        "-t",
+        "openbuildnet-dev:v0.1",
+        "docker/dev"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OpenBuildNet: Run single-node smoke test",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-File",
+        "scripts/Test-SingleNodeDocker.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OpenBuildNet: Build and test",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "OpenBuildNet: Build dev image",
+        "OpenBuildNet: Run single-node smoke test"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
