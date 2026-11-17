@@ -10,7 +10,7 @@ Windows 是日常開發與操作端，裝有 Arch Linux 的 MacBook Pro 是遠�
 sudo pacman -Syu openssh git python docker
 sudo systemctl enable --now sshd docker
 sudo usermod -aG docker "$USER"
-ip -br address
+ip -br -4 address
 sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
@@ -54,19 +54,38 @@ ssh build-arch 'hostname; python --version; docker info'
 從 Windows 的 repo 根目錄執行。這個方式會將目前工作目錄中的開發檔案傳到筆電，因此也能測試尚未提交的變更。每次解壓到獨立目錄，方便核對是哪一批測試。
 
 ```powershell
-$archive = Join-Path ([IO.Path]::GetTempPath()) ("openbuildnet-" + [guid]::NewGuid().ToString("N") + ".tar.gz")
-$remoteArchive = Split-Path -Leaf $archive
-tar -czf $archive scripts docker examples
-if ($LASTEXITCODE -ne 0) { throw "打包失敗" }
-scp $archive "build-arch:$remoteArchive"
-if ($LASTEXITCODE -ne 0) { throw "上傳失敗" }
-ssh build-arch ('set -eu; d=$(mktemp -d "$HOME/openbuildnet.XXXXXX"); printf "%s\n" "$d"; tar -xzf "$HOME/{0}" -C "$d"; cd "$d"; docker build -t openbuildnet-dev:v0.1 docker/dev; python scripts/test_openbuildnet.py' -f $remoteArchive)
+.\scripts\Send-ArchDevelopmentSnapshot.ps1
 ```
 
-命令會印出遠端測試目錄，測試輸出直接回到 Windows。筆電需要保持開機、連網並避免在執行期間睡眠。腳本若連不上 Docker，先透過 SSH 確認 `id -nG` 包含 `docker`，以及 `systemctl is-active docker` 回傳 `active`。
+Docker 尚未就緒時，使用 `-UploadOnly` 先驗證上傳與解包。若尚未設定 `build-arch`，先在 Arch 終端執行 `whoami` 確認帳號，再用 `ip -br -4 address` 查詢 IPv4。選擇和 Windows 連到同一區網的 Wi-Fi 或有線介面。例如輸出為 `192.168.0.103/24`，SSH 位址只填 `192.168.0.103`。
+
+回到 Windows PowerShell 執行以下範例，將 `user332` 和 `192.168.0.103` 換成自己的 Arch 帳號與區網 IPv4。
+
+```powershell
+.\scripts\Send-ArchDevelopmentSnapshot.ps1 -UploadOnly -SshHost user332@192.168.0.103
+```
+
+命令會印出遠端目錄，測試輸出直接回到 Windows。封裝檔保留在 Windows 暫存目錄與 Arch 登入帳號的家目錄。筆電需要保持開機與連網。腳本若連不上 Docker，先透過 SSH 確認 `id -nG` 包含 `docker`，以及 `systemctl is-active docker` 回傳 `active`。
 
 ## 進入雙節點驗收
 
-上述流程可從 Windows 完成 Arch 上的單節點測試。要用 OpenBuildNet 從 Windows 派工給 Arch，還需照[開發手冊](Development.md#雙節點協作)安裝遠端的 `openbuildnet-peer receive` 入口，指向要驗收的版本。
+上述流程可從 Windows 完成 Arch 上的單節點測試。要從 Windows 派工給 Arch，在 Arch 的驗收版本目錄中執行以下指令。入口使用登入帳號的 `~/.local/bin/openbuildnet-peer`，因此無須將該目錄加到 SSH 工作階段的 `PATH`。
+
+```bash
+mkdir -p ~/.local/bin ~/.local/share/openbuildnet
+install -m 600 scripts/openbuildnet.py scripts/openbuildnet_peer.py ~/.local/share/openbuildnet/
+cat > ~/.local/bin/openbuildnet-peer <<'EOF'
+#!/bin/sh
+exec python "$HOME/.local/share/openbuildnet/openbuildnet_peer.py" "$@"
+EOF
+chmod 700 ~/.local/bin/openbuildnet-peer
+```
+
+之後更新接收端時，在新的遠端版本目錄重新執行上面的 `install` 指令。回到 Windows 查詢能力，再依回報的平台提交範例。其他操作見[開發手冊](Development.md#雙節點協作)。
+
+```powershell
+python scripts/openbuildnet_peer.py capabilities build-arch
+python scripts/openbuildnet_peer.py submit build-arch examples/single-node-task.json --platform linux/amd64
+```
 
 要驗收 Arch 反向派工給 Windows，Windows 也要啟用 OpenSSH Server、設定 Arch 端的公鑰與 Windows 的接收入口。這個方向仍可坐在 Windows 前操作，先 SSH 登入 Arch，再從 Arch 執行提交指令。初次連線同樣要從可信管道核對 Windows 主機金鑰。

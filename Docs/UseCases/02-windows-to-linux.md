@@ -15,4 +15,4 @@
 
 ## 核心價值
 
-開發者可以留在 Windows 的開發環境，使用經授權的 Linux 節點完成建構與測試。專案目前的實機驗收組合是 Windows 提交端加 Arch Linux 筆電，設定方式見 [Windows 操作 Arch Linux 建構節點指南](../WindowsArchSSH.md)。這組環境的雙向派工仍待驗收。
+開發者可以留在 Windows 的開發環境，使用經授權的 Linux 節點完成建構與測試。專案目前的實機驗收組合是 Windows 提交端加 Arch Linux 筆電，設定方式見 [Windows 操作 Arch Linux 建構節點指南](../WindowsArchSSH.md)。這組環境已完成雙向派工驗收。

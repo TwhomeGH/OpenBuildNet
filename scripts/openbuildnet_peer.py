@@ -16,6 +16,11 @@ MAX_REQUEST = 1024 * 1024
 MAX_LOG = 1024 * 1024
 
 
+RECEIVE_COMMAND = (
+    'if [ -x "$HOME/.local/bin/openbuildnet-peer" ]; then '
+    'exec "$HOME/.local/bin/openbuildnet-peer" receive; '
+    'else exec openbuildnet-peer receive; fi'
+)
 def _receive(request):
     """Execute one request under the receiving node's capacity policy."""
     operation = request["operation"]
@@ -64,7 +69,7 @@ def _exchange(peer, request):
         raise ValueError("request exceeds 1 MiB")
     reply = subprocess.run(
         ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-         "-o", "ConnectTimeout=10", "--", peer, "openbuildnet-peer receive"],
+         "-o", "ConnectTimeout=10", "--", peer, RECEIVE_COMMAND],
         input=payload, stdout=subprocess.PIPE, check=True, timeout=420,
     )
     return json.loads(reply.stdout)
