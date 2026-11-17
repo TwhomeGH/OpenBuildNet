@@ -88,3 +88,11 @@ python scripts/openbuildnet_peer.py submit build-node-b examples/single-node-tas
 `--platform` 使用目標節點回報的值。每個接收端提供一個遠端執行名額，滿載或平台與映像標籤不符時拒絕派工。接受的任務同步回傳狀態、退出碼、日誌及指定產物，並在提交端目前目錄建立結果資料夾。可用 `--output` 指定既有資料夾。請求上限為 1 MiB，回傳日誌上限為 1 MiB，完整日誌留在執行節點。
 
 驗收時先由 A 提交到 B，再由 B 提交到 A。每次核對本機收到的 `result.json`、日誌及產物，另以不相符的平台提交一次，確認節點拒絕。
+
+### Worker 唯讀診斷
+
+```powershell
+python scripts/openbuildnet_peer.py diagnostics build-arch
+```
+
+查詢回傳節點的建構平台、映像和可用名額。執行遠端派工時，`active_task` 會包含任務 ID、`running` 狀態及 UTC 開始時間。空閒時或建構已完成且正在回傳結果時，此欄位可為 `null`。本機直接執行的任務不佔遠端名額。連線失敗會回報錯誤，接收端也需更新至支援診斷的版本。

@@ -2,6 +2,7 @@
 import argparse
 import base64
 from contextlib import closing
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
@@ -9,22 +10,23 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import uuid
 
 import openbuildnet
 
 MAX_REQUEST = 1024 * 1024
 MAX_LOG = 1024 * 1024
-
-
 RECEIVE_COMMAND = (
     'if [ -x "$HOME/.local/bin/openbuildnet-peer" ]; then '
     'exec "$HOME/.local/bin/openbuildnet-peer" receive; '
     'else exec openbuildnet-peer receive; fi'
 )
+
+
 def _receive(request):
     """Execute one request under the receiving node's capacity policy."""
     operation = request["operation"]
-    if operation not in ("capabilities", "submit"):
+    if operation not in ("capabilities", "diagnostics", "submit"):
         raise ValueError("unknown operation")
 
     platform = openbuildnet.docker(
@@ -32,6 +34,7 @@ def _receive(request):
         openbuildnet.IMAGE, capture_output=True, text=True, timeout=15,
     ).stdout.strip()
     openbuildnet.STATE.mkdir(parents=True, exist_ok=True)
+    active_path = openbuildnet.STATE / "peer-active.json"
     with closing(sqlite3.connect(openbuildnet.STATE / "peer.sqlite3", timeout=0)) as capacity:
         try:
             capacity.execute("BEGIN EXCLUSIVE")
@@ -42,14 +45,32 @@ def _receive(request):
         else:
             available = 1
 
-        if operation == "capabilities":
-            return {"platform": platform, "image": openbuildnet.IMAGE, "available": available}
+        if operation in ("capabilities", "diagnostics"):
+            response = {"platform": platform, "image": openbuildnet.IMAGE, "available": available}
+            if operation == "diagnostics":
+                response["active_task"] = None
+                if not available:
+                    try:
+                        response["active_task"] = json.loads(active_path.read_text(encoding="utf-8"))
+                    except FileNotFoundError:
+                        # A slot may be reserved before the task starts or while its result is returned.
+                        pass
+            return response
         if not available:
             return {"accepted": False, "reason": "busy"}
         if request["platform"] != platform or request["image"] != openbuildnet.IMAGE:
             return {"accepted": False, "reason": "unsupported environment"}
 
-        result = openbuildnet.run(request["task"])
+        task_id = uuid.uuid4().hex
+        active = {"task_id": task_id, "status": "running",
+                  "started_at": datetime.now(timezone.utc).isoformat()}
+        pending = active_path.with_suffix(".tmp")
+        pending.write_text(json.dumps(active), encoding="utf-8")
+        pending.replace(active_path)
+        try:
+            result = openbuildnet.run(request["task"], task_id=task_id)
+        finally:
+            active_path.unlink(missing_ok=True)
         artifact = Path(result["artifact"]) if result["artifact"] else None
         with Path(result["log"]).open("rb") as log:
             contents = log.read(MAX_LOG + 1)
@@ -97,6 +118,7 @@ def main():
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("receive")
     commands.add_parser("capabilities").add_argument("peer")
+    commands.add_parser("diagnostics").add_argument("peer")
     submit = commands.add_parser("submit")
     submit.add_argument("peer")
     submit.add_argument("task", type=Path)

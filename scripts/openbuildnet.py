@@ -39,7 +39,11 @@ def collect(container, name, directory):
                 shutil.copyfileobj(source, target)
 
 
-def run(task):
+def run(task, *, task_id=None):
+    """Execute a task and return its persisted result.
+
+    A caller may supply a freshly generated task ID to publish it before execution.
+    """
     command = task["command"]
     timeout = task["timeout_seconds"]
     artifact = filename(task["artifact"])
@@ -51,7 +55,7 @@ def run(task):
         raise ValueError("timeout_seconds must be an integer from 1 to 300")
     inputs = {filename(name): contents.encode("utf-8") for name, contents in task["input"].items()}
 
-    task_id = uuid.uuid4().hex
+    task_id = task_id or uuid.uuid4().hex
     container = f"openbuildnet-{task_id}"
     directory = STATE / task_id
     directory.mkdir(parents=True)
