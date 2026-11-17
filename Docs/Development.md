@@ -91,6 +91,8 @@ python scripts/openbuildnet_peer.py submit build-node-b examples/single-node-tas
 
 ### Worker 唯讀診斷
 
+磁碟、RAM 量測與接單配額的設計見 [Worker 資源與接單規格](WorkerResources.md)。
+
 ```powershell
 python scripts/openbuildnet_peer.py diagnostics build-arch
 ```

@@ -4,8 +4,10 @@ import base64
 from contextlib import closing
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -16,11 +18,123 @@ import openbuildnet
 
 MAX_REQUEST = 1024 * 1024
 MAX_LOG = 1024 * 1024
+MIB = 1024 * 1024
+DEFAULT_RESERVES = {"memory": 256 * MIB, "persistent_disk": 1024 * MIB,
+                    "snapshot_disk": 64 * MIB}
 RECEIVE_COMMAND = (
     'if [ -x "$HOME/.local/bin/openbuildnet-peer" ]; then '
     'exec "$HOME/.local/bin/openbuildnet-peer" receive; '
     'else exec openbuildnet-peer receive; fi'
 )
+
+
+def _measurement(scope, source, reader):
+    """Read available bytes and report an explicit unknown on probe failure."""
+    try:
+        available = reader()
+    except (OSError, ValueError, StopIteration, subprocess.SubprocessError):
+        return {"scope": scope, "source": source, "measurement_status": "unknown",
+                "measured_at": None, "available_bytes": None}
+    return {"scope": scope, "source": source, "measurement_status": "ok",
+            "measured_at": datetime.now(timezone.utc).isoformat(), "available_bytes": available}
+
+
+def _disk_measurement(path):
+    """Return disk availability and the device ID used to identify shared capacity."""
+    reading = _measurement(None, str(path), lambda: shutil.disk_usage(path).free)
+    try:
+        reading["scope"] = f"filesystem:{path.stat().st_dev}"
+    except OSError:
+        pass
+    return reading
+
+
+def _available_memory():
+    for line in Path("/proc/meminfo").read_text(encoding="ascii").splitlines():
+        if line.startswith("MemAvailable:"):
+            return int(line.split()[1]) * 1024
+    raise ValueError("MemAvailable is missing")
+
+
+def _measure_resources():
+    """Measure Linux host and local Docker resources for read-only diagnostics."""
+    if sys.platform != "linux":
+        return None
+    resources = {
+        "memory": _measurement("linux-host", "/proc/meminfo:MemAvailable", _available_memory),
+        "state_disk": _disk_measurement(openbuildnet.STATE),
+        "snapshot_disk": _disk_measurement(Path(tempfile.gettempdir())),
+    }
+    try:
+        endpoint = os.environ.get("DOCKER_HOST") if not os.environ.get("DOCKER_CONTEXT") else None
+        if not endpoint:
+            endpoint = openbuildnet.docker(
+                "context", "inspect", "--format", "{{.Endpoints.docker.Host}}",
+                capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+        if endpoint not in ("unix:///var/run/docker.sock", "unix:///run/docker.sock"):
+            raise ValueError("expected the local system Docker socket")
+        info = json.loads(openbuildnet.docker(
+            "info", "--format", "{{json .}}", capture_output=True, text=True, timeout=5,
+        ).stdout)
+        root = Path(info["DockerRootDir"])
+        if not root.is_absolute():
+            raise ValueError("missing Docker storage directory")
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        resources["runtime_disk"] = {
+            "scope": None, "source": "DockerRootDir", "measurement_status": "unknown",
+            "measured_at": None, "available_bytes": None,
+        }
+        return resources
+
+    resources["runtime_disk"] = _disk_measurement(root)
+    if ["driver-type", "io.containerd.snapshotter.v1"] in (info.get("DriverStatus") or []):
+        containerd_root = Path(os.environ.get("OPENBUILDNET_CONTAINERD_ROOT", "/var/lib/containerd"))
+        resources["containerd_disk"] = _disk_measurement(containerd_root)
+    return resources
+
+
+def _system_reserves():
+    """Read nonnegative byte overrides from the receiving worker's environment."""
+    reserves = {}
+    for resource, default in DEFAULT_RESERVES.items():
+        value = int(os.environ.get(f"OPENBUILDNET_{resource.upper()}_RESERVE_BYTES", default))
+        if value < 0:
+            raise ValueError(f"{resource} reserve cannot be negative")
+        reserves[resource] = value
+    return reserves
+
+
+def _resource_rejection(resources, reserves):
+    """Check one fixed-profile build against fresh readings and system reserves."""
+    pools = {}
+    for resource, reading in resources.items():
+        scope = reading["scope"]
+        if reading["measurement_status"] != "ok" or scope is None:
+            return {"accepted": False, "reason": "resource_unavailable", "resource": resource}
+        if resource == "memory":
+            if reading["available_bytes"] < reserves["memory"] + 128 * MIB:
+                return {"accepted": False, "reason": "insufficient_memory", "resource": resource}
+            continue
+        pool = pools.setdefault(scope, {"available": reading["available_bytes"], "reserve": 0,
+                                        "demands": {}, "resources": []})
+        pool["available"] = min(pool["available"], reading["available_bytes"])
+        pool["resources"].append(resource)
+        if resource == "snapshot_disk":
+            policy, demand, purpose = "snapshot_disk", 4 * MIB, "snapshot"
+        elif resource == "state_disk":
+            policy, demand, purpose = "persistent_disk", 16 * MIB, "state"
+        else:
+            # Docker and containerd may report the same backing store.
+            policy, demand, purpose = "persistent_disk", 128 * MIB, "runtime"
+        pool["reserve"] = max(pool["reserve"], reserves[policy])
+        pool["demands"][purpose] = demand
+
+    for scope, pool in pools.items():
+        if pool["available"] < pool["reserve"] + sum(pool["demands"].values()):
+            return {"accepted": False, "reason": "insufficient_disk",
+                    "scope": scope, "resources": pool["resources"]}
+    return None
 
 
 def _receive(request):
@@ -34,6 +148,7 @@ def _receive(request):
         openbuildnet.IMAGE, capture_output=True, text=True, timeout=15,
     ).stdout.strip()
     openbuildnet.STATE.mkdir(parents=True, exist_ok=True)
+    resources = _measure_resources() if operation == "diagnostics" else None
     active_path = openbuildnet.STATE / "peer-active.json"
     with closing(sqlite3.connect(openbuildnet.STATE / "peer.sqlite3", timeout=0)) as capacity:
         try:
@@ -48,6 +163,7 @@ def _receive(request):
         if operation in ("capabilities", "diagnostics"):
             response = {"platform": platform, "image": openbuildnet.IMAGE, "available": available}
             if operation == "diagnostics":
+                response["resources"] = resources
                 response["active_task"] = None
                 if not available:
                     try:
@@ -60,6 +176,12 @@ def _receive(request):
             return {"accepted": False, "reason": "busy"}
         if request["platform"] != platform or request["image"] != openbuildnet.IMAGE:
             return {"accepted": False, "reason": "unsupported environment"}
+
+        resources = _measure_resources()
+        if resources is not None:
+            rejection = _resource_rejection(resources, _system_reserves())
+            if rejection:
+                return rejection
 
         task_id = uuid.uuid4().hex
         active = {"task_id": task_id, "status": "running",
