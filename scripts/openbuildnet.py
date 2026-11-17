@@ -35,7 +35,10 @@ def collect(container, name, directory):
             member = bundle.next()
             if member is None or not member.isfile() or member.name != name or member.size > 8 * 1024 * 1024:
                 raise ValueError("expected one regular artifact of at most 8 MiB")
-            with bundle.extractfile(member) as source, (directory / name).open("xb") as target:
+            source = bundle.extractfile(member)
+            if source is None:
+                raise ValueError("could not read artifact from archive")
+            with source, (directory / name).open("xb") as target:
                 shutil.copyfileobj(source, target)
 
 
