@@ -67,6 +67,58 @@ Docker 尚未就緒時，使用 `-UploadOnly` 先驗證上傳與解包。若尚�
 
 命令會印出遠端目錄，測試輸出直接回到 Windows。封裝檔保留在 Windows 暫存目錄與 Arch 登入帳號的家目錄。筆電需要保持開機與連網。腳本若連不上 Docker，先透過 SSH 確認 `id -nG` 包含 `docker`，以及 `systemctl is-active docker` 回傳 `active`。
 
+## 合蓋、睡眠與休眠
+
+電源設定由 Arch 節點管理員手動套用。Windows 的 `Send-ArchDevelopmentSnapshot.ps1` 負責上傳開發檔案及執行測試。筆電平常也要使用時，先選「只停用合蓋睡眠」。若這台機器專供遠端派工，且需要避免桌面或閒置程式要求睡眠，再套用「專用節點停用 systemd 睡眠與休眠」。
+
+在 Arch 上檢查 systemd 的設定、桌面是否接管合蓋事件，以及這次開機的睡眠紀錄。
+
+```bash
+cat /sys/class/dmi/id/product_name
+cat /proc/acpi/button/lid/*/state
+systemd-analyze cat-config systemd/logind.conf
+systemd-analyze cat-config systemd/sleep.conf
+systemd-inhibit --list
+journalctl -b -u systemd-logind --no-pager | grep -Ei 'lid|suspend|hibernate'
+```
+
+若日誌有 `Lid closed.` 隨即出現 `Suspending...`，代表合蓋後確實進入睡眠。若 inhibitor 清單有 `handle-lid-switch`，先查持有者的桌面電源設定。桌面也可能透過自己的快捷鍵或閒置程式另外要求睡眠，日誌會顯示請求來源。[systemd logind 設定](https://www.freedesktop.org/software/systemd/man/latest/logind.conf.html)
+
+### 只停用合蓋睡眠
+
+在 Arch 建立 `/etc/systemd/logind.conf.d/90-openbuildnet-lid.conf`。可先用 `sudo mkdir -p /etc/systemd/logind.conf.d` 建立目錄，再用 `sudoedit` 編輯檔案。
+
+```ini
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+```
+
+### 專用節點停用 systemd 睡眠與休眠
+
+若也要關閉桌面或閒置程式透過 systemd 要求的睡眠，在 `/etc/systemd/sleep.conf.d/90-openbuildnet-awake.conf` 加入以下設定。可先用 `sudo mkdir -p /etc/systemd/sleep.conf.d` 建立目錄，再用 `sudoedit` 編輯檔案。[systemd 睡眠設定](https://www.freedesktop.org/software/systemd/man/255/systemd-sleep.conf.html)
+
+```ini
+[Sleep]
+AllowSuspend=no
+AllowHibernation=no
+AllowHybridSleep=no
+AllowSuspendThenHibernate=no
+```
+
+### 多系統重新開機與驗收
+
+如果同一台筆電安裝了 Arch、macOS 或 Windows，執行 `sudo reboot` 前先確認開機選單的預設項目，或安排人在現場選擇 Arch。重新開機會中斷 SSH。若韌體開到另一個系統、停在選單或等待磁碟解鎖，Arch 的 SSH 服務就還沒上線。
+
+Intel MacBook Pro 2014 可在啟動時按住 **Option（⌥）** 進入 Apple 的啟動管理程式，選擇能進入 Arch 的 EFI 啟動項目。若該項目再開啟 GRUB 等開機選單，依實際配置選 Arch。[Apple 的 Intel Mac 開機組合鍵](https://support.apple.com/en-us/102603)
+
+若打算靠 Wake-on-LAN 遠端喚醒，先針對實際使用的網路介面、韌體設定及電源狀態驗證。喚醒成功後仍依現有開機設定選擇系統。第一次測試請在能接觸筆電時進行。
+
+重新進入 Arch 後，從 Windows 執行 `ssh -o BatchMode=yes build-arch 'cat /etc/os-release; uptime'`，確認連回的是 Arch。接上電源、保持通風，合蓋後再執行同一條指令，並於開蓋後核對本次開機的 logind 日誌。若要還原，移走上述新增的設定檔後重新開機。
+
+2026-11-17 實測 MacBookPro11,1 在套用合蓋忽略設定並重開後，筆電維持合蓋時，Windows 的 `ssh -o BatchMode=yes build-arch uptime` 成功回傳。此結果確認當次合蓋時 SSH 可用。
+
 ## 進入雙節點驗收
 
 上述流程可從 Windows 完成 Arch 上的單節點測試。要從 Windows 派工給 Arch，在 Arch 的驗收版本目錄中執行以下指令。入口使用登入帳號的 `~/.local/bin/openbuildnet-peer`，因此無須將該目錄加到 SSH 工作階段的 `PATH`。
