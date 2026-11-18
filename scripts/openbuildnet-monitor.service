@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenBuildNet worker resource monitor
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python -B %h/.local/share/openbuildnet/openbuildnet_peer.py monitor
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

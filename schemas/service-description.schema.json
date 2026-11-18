@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpenBuildNet service description draft 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version", "node_id", "service_id", "service_type", "service_version",
+    "capabilities", "environment", "resources", "access_policy",
+    "status", "observed_at", "valid_until", "transport", "required_extensions", "extensions"
+  ],
+  "properties": {
+    "contract_version": { "const": "0.1-draft1" },
+    "node_id": { "$ref": "#/$defs/identifier" },
+    "service_id": { "$ref": "#/$defs/identifier" },
+    "service_type": { "$ref": "#/$defs/qualifiedName" },
+    "service_version": { "$ref": "#/$defs/identifier" },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/capability" }
+    },
+    "environment": {
+      "type": "object",
+      "description": "Service-specific fields require the selected service contract."
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_concurrent_requests", "available_slots", "pools"],
+      "properties": {
+        "max_concurrent_requests": { "type": "integer", "minimum": 1 },
+        "available_slots": { "type": ["integer", "null"], "minimum": 0 },
+        "pools": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/resourcePool" }
+        }
+      }
+    },
+    "access_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "revision", "default_effect", "operations"],
+      "properties": {
+        "policy_id": { "$ref": "#/$defs/identifier" },
+        "revision": { "$ref": "#/$defs/identifier" },
+        "default_effect": { "const": "deny" },
+        "operations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
+      }
+    },
+    "status": { "enum": ["ready", "busy", "draining", "unavailable"] },
+    "observed_at": { "$ref": "#/$defs/utcTime" },
+    "valid_until": { "$ref": "#/$defs/utcTime" },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "protocol_version", "endpoint_ref"],
+      "properties": {
+        "kind": { "enum": ["ssh", "https"] },
+        "protocol_version": { "$ref": "#/$defs/identifier" },
+        "endpoint_ref": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "required_extensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/qualifiedName" }
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/qualifiedName" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "qualifiedName": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_-]*)+$"
+    },
+    "utcTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "nullableBytes": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "nullableTime": {
+      "anyOf": [{ "$ref": "#/$defs/utcTime" }, { "type": "null" }]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "verifier_id", "verified_at", "valid_until"],
+      "properties": {
+        "evidence_id": { "$ref": "#/$defs/identifier" },
+        "verifier_id": { "$ref": "#/$defs/identifier" },
+        "verified_at": { "$ref": "#/$defs/utcTime" },
+        "valid_until": { "$ref": "#/$defs/utcTime" }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "declared_by", "verification"],
+      "properties": {
+        "id": { "$ref": "#/$defs/qualifiedName" },
+        "declared_by": { "$ref": "#/$defs/identifier" },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "evidence"],
+          "properties": {
+            "status": { "enum": ["unverified", "verified", "failed"] },
+            "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "status": { "const": "verified" } } },
+              "then": { "properties": { "evidence": { "minItems": 1 } } }
+            }
+          ]
+        }
+      }
+    },
+    "resourcePool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "kind", "scope", "measurement_status", "measured_at", "available_bytes",
+        "system_reserve_bytes", "worker_limit_bytes", "per_task_limit_bytes",
+        "reserved_bytes", "effective_available_bytes"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "kind": { "enum": ["memory", "disk", "vram"] },
+        "scope": { "anyOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }] },
+        "measurement_status": { "enum": ["ok", "unknown", "stale"] },
+        "measured_at": { "$ref": "#/$defs/nullableTime" },
+        "available_bytes": { "$ref": "#/$defs/nullableBytes" },
+        "system_reserve_bytes": { "type": "integer", "minimum": 0 },
+        "worker_limit_bytes": { "$ref": "#/$defs/nullableBytes" },
+        "per_task_limit_bytes": { "$ref": "#/$defs/nullableBytes" },
+        "reserved_bytes": { "$ref": "#/$defs/nullableBytes" },
+        "effective_available_bytes": { "$ref": "#/$defs/nullableBytes" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "measurement_status": { "const": "ok" } } },
+          "then": {
+            "properties": {
+              "scope": { "$ref": "#/$defs/identifier" },
+              "measured_at": { "$ref": "#/$defs/utcTime" },
+              "available_bytes": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "measurement_status": { "const": "unknown" } } },
+          "then": {
+            "properties": {
+              "available_bytes": { "type": "null" },
+              "effective_available_bytes": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "measurement_status": { "const": "stale" } } },
+          "then": { "properties": { "effective_available_bytes": { "type": "null" } } }
+        }
+      ]
+    }
+  }
+}

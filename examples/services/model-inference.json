@@ -1,0 +1,55 @@
+{
+  "contract_version": "0.1-draft1",
+  "node_id": "node:example-model-lab",
+  "service_id": "large-model",
+  "service_type": "ai.inference",
+  "service_version": "0.1-draft1",
+  "capabilities": [
+    {
+      "id": "text.generate",
+      "declared_by": "node:example-model-lab",
+      "verification": { "status": "unverified", "evidence": [] }
+    },
+    {
+      "id": "tools.call",
+      "declared_by": "node:example-model-lab",
+      "verification": { "status": "unverified", "evidence": [] }
+    },
+    {
+      "id": "output.structured",
+      "declared_by": "node:example-model-lab",
+      "verification": { "status": "unverified", "evidence": [] }
+    }
+  ],
+  "environment": {
+    "runtime": "vllm",
+    "model": {
+      "id": "community-large-model",
+      "revision": "example-revision",
+      "parameters": "70B",
+      "quantization": "4bit",
+      "context_window": 32768
+    }
+  },
+  "resources": {
+    "max_concurrent_requests": 4,
+    "available_slots": null,
+    "pools": []
+  },
+  "access_policy": {
+    "policy_id": "trusted-model-peers",
+    "revision": "example-1",
+    "default_effect": "deny",
+    "operations": ["infer"]
+  },
+  "status": "ready",
+  "observed_at": "2026-11-18T04:00:00Z",
+  "valid_until": "2026-11-18T04:05:00Z",
+  "transport": {
+    "kind": "https",
+    "protocol_version": "example-model-api-v1",
+    "endpoint_ref": "peer:example-model-lab"
+  },
+  "required_extensions": [],
+  "extensions": {}
+}

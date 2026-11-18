@@ -1,0 +1,54 @@
+{
+  "contract_version": "0.1-draft1",
+  "node_id": "node:example-build-host",
+  "service_id": "build-default",
+  "service_type": "build.runner",
+  "service_version": "0.1-draft1",
+  "capabilities": [
+    {
+      "id": "build.execute",
+      "declared_by": "node:example-build-host",
+      "verification": { "status": "unverified", "evidence": [] }
+    }
+  ],
+  "environment": {
+    "platform": "linux/amd64",
+    "runtime": "docker",
+    "image": "openbuildnet-dev:v0.1"
+  },
+  "resources": {
+    "max_concurrent_requests": 1,
+    "available_slots": 1,
+    "pools": [
+      {
+        "id": "host-memory",
+        "kind": "memory",
+        "scope": "linux-host",
+        "measurement_status": "unknown",
+        "measured_at": null,
+        "available_bytes": null,
+        "system_reserve_bytes": 268435456,
+        "worker_limit_bytes": null,
+        "per_task_limit_bytes": 134217728,
+        "reserved_bytes": null,
+        "effective_available_bytes": null
+      }
+    ]
+  },
+  "access_policy": {
+    "policy_id": "trusted-build-peers",
+    "revision": "example-1",
+    "default_effect": "deny",
+    "operations": ["submit", "diagnostics"]
+  },
+  "status": "ready",
+  "observed_at": "2026-11-18T04:00:00Z",
+  "valid_until": "2026-11-18T04:05:00Z",
+  "transport": {
+    "kind": "ssh",
+    "protocol_version": "legacy-json-v1",
+    "endpoint_ref": "peer:example-build-host"
+  },
+  "required_extensions": [],
+  "extensions": {}
+}

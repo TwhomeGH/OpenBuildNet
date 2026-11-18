@@ -125,7 +125,7 @@ Intel MacBook Pro 2014 可在啟動時按住 **Option（⌥）** 進入 Apple �
 
 ```bash
 mkdir -p ~/.local/bin ~/.local/share/openbuildnet
-install -m 600 scripts/openbuildnet.py scripts/openbuildnet_peer.py ~/.local/share/openbuildnet/
+install -m 600 scripts/openbuildnet.py scripts/openbuildnet_peer.py scripts/worker_events.py scripts/bounded_process.py ~/.local/share/openbuildnet/
 cat > ~/.local/bin/openbuildnet-peer <<'EOF'
 #!/bin/sh
 exec python "$HOME/.local/share/openbuildnet/openbuildnet_peer.py" "$@"
@@ -141,3 +141,19 @@ python scripts/openbuildnet_peer.py submit build-arch examples/single-node-task.
 ```
 
 要驗收 Arch 反向派工給 Windows，Windows 也要啟用 OpenSSH Server、設定 Arch 端的公鑰與 Windows 的接收入口。這個方向仍可坐在 Windows 前操作，先 SSH 登入 Arch，再從 Arch 執行提交指令。初次連線同樣要從可信管道核對 Windows 主機金鑰。
+
+## Arch 常駐資源監看
+
+先依上一節更新接收程式，再從 Arch 的專案版本目錄安裝使用者服務。
+
+```bash
+mkdir -p ~/.config/systemd/user
+install -m 600 scripts/openbuildnet-monitor.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now openbuildnet-monitor.service
+systemctl --user status openbuildnet-monitor.service --no-pager
+```
+
+服務在空閒時等待 PSI 事件並依設定定期核對，診斷命令的 `worker_monitor` 會顯示最近報告。排程與降級欄位見 [Worker 資源規格](WorkerResources.md#取樣排程與設定)。更新程式後執行 `systemctl --user restart openbuildnet-monitor.service`。排查服務錯誤可用 `journalctl --user -u openbuildnet-monitor.service -n 40 --no-pager`。
+
+使用者服務跟隨使用者管理程序的生命週期。若要開機後、尚未登入或已登出時仍維持服務，在 Arch 執行 `sudo loginctl enable-linger "$USER"`，再用 `loginctl show-user "$USER" -p Linger` 確認。這台筆電目前實測服務啟動成功，開機未登入情境仍待驗收。要停止此服務可用 `systemctl --user disable --now openbuildnet-monitor.service`。

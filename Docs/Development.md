@@ -74,6 +74,10 @@ python scripts/openbuildnet.py show <task_id>
 
 建置開發映像後執行 `python scripts/test_openbuildnet.py`。驗收經由 CLI 提交成功、非零退出、逾時與產物缺失案例，並逐筆用 `show` 比對持久化結果、檢查日誌與產物。驗收使用臨時狀態目錄。
 
+驗收另包含受限容器內的記憶體超限，以及超限後重新執行成功任務。執行器使用 128 MiB RAM 上限並將容器 swap 額度設為零。Docker 回報 `OOMKilled` 時，結果為 `failed`，原因為 `memory_limit_exceeded`。退出碼 137 本身不足以判定 OOM。測試會確認各次執行的容器已移除。
+
+驗收也包含日誌超過 1 MiB、產物超過 8 MiB，以及輸入快照超過 64 個檔案或 4 MiB 的案例。執行器的容器採用 `none` 日誌驅動，建構日誌由本機有界串流保存到任務結果目錄。收集產物時的暫存資料也受大小限制。
+
 ## 雙節點協作
 
 使用 Windows 開發並以 Arch Linux 筆電作為遠端節點時，先參考[從 Windows 操作 Arch Linux 建構節點](WindowsArchSSH.md)。
@@ -92,6 +96,8 @@ python scripts/openbuildnet_peer.py submit build-node-b examples/single-node-tas
 ### Worker 唯讀診斷
 
 磁碟、RAM 量測與接單配額的設計見 [Worker 資源與接單規格](WorkerResources.md)。
+
+Arch 查詢會回傳 `resource_health` 和 `admission`，分別顯示系統資源餘裕與目前是否可接單。任務執行期間的 `active_task.resource_monitor` 會定期更新並記錄狀態變化，完成後隨結果保留。可用 `python scripts/test_peer_resources.py` 驗證資源壓力、恢復、拒絕與監看結果保存，測試使用模擬讀值。
 
 ```powershell
 python scripts/openbuildnet_peer.py diagnostics build-arch

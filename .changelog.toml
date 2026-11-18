@@ -15,7 +15,7 @@ id = "architecture"
 color = "violet"
 title = "架構與規格"
 order = 20
-paths = ["Docs/SingleNodeExecution.md", "Docs/WorkerResources.md"]
+paths = ["Docs/SingleNodeExecution.md", "Docs/WorkerResources.md", "Docs/ServiceContract.md"]
 
 [[tool.changelog.docs.groups]]
 id = "use-cases"
